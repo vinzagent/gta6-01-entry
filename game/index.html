@@ -3,17 +3,98 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Vice Harbor — Neon Tide</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #171233; font-family: "Segoe UI", system-ui, sans-serif; }
+  canvas.gl { position: fixed; inset: 0; display: block; }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 10; }
+  #top-left { position: absolute; top: 16px; left: 18px; }
+  #money { font-size: 30px; font-weight: 800; color: #39d353; text-shadow: 0 2px 6px rgba(0,0,0,.7); letter-spacing: .5px; }
+  #health-wrap { width: 190px; height: 13px; margin-top: 5px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #39d353; transition: width .18s; }
+  #health-label { font-size: 10px; letter-spacing: 2px; opacity: .8; margin-top: 2px; }
+  #stars { position: absolute; top: 12px; right: 20px; font-size: 30px; color: #ffd23e; text-shadow: 0 0 9px rgba(255,180,0,.8), 0 2px 4px rgba(0,0,0,.6); letter-spacing: 3px; }
+  #speed { position: absolute; right: 22px; bottom: 18px; font-size: 24px; font-weight: 700; text-shadow: 0 2px 5px rgba(0,0,0,.8); }
+  #minimap { position: absolute; left: 18px; bottom: 18px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.4); border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  #mission { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(10,6,24,.62); padding: 8px 22px 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,.22); min-width: 320px; }
+  #mission-title { font-size: 19px; font-weight: 800; letter-spacing: 1.5px; }
+  #mission-sub { font-size: 13px; opacity: .92; margin-top: 1px; }
+  #mission-time { font-size: 17px; font-weight: 700; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  #prompt { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); background: rgba(10,6,24,.78); border: 1px solid #00e5ff; color: #bffbff; padding: 7px 18px; border-radius: 20px; font-size: 15px; font-weight: 600; display: none; }
+  #toast { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(8px); background: rgba(10,6,24,.8); padding: 8px 20px; border-radius: 8px; font-size: 16px; font-weight: 600; opacity: 0; transition: opacity .25s, transform .25s; white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #bust { position: absolute; left: 50%; top: 108px; transform: translateX(-50%); width: 260px; text-align: center; display: none; }
+  #bust-label { color: #ff5d5d; font-weight: 800; letter-spacing: 3px; font-size: 15px; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #bust-wrap { height: 9px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.4); border-radius: 5px; overflow: hidden; margin-top: 3px; }
+  #bust-fill { height: 100%; width: 0%; background: #e5484d; }
+
+  /* ---------- Overlays ---------- */
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; z-index: 20; }
+  #title { background: linear-gradient(180deg, rgba(23,10,44,.25) 0%, rgba(23,10,44,.05) 40%, rgba(23,10,44,.55) 100%); }
+  #logo { font-size: 96px; font-weight: 900; line-height: .95; letter-spacing: 2px; background: linear-gradient(180deg, #ffe259 15%, #ff7518 55%, #ff2e88 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 rgba(64,0,64,.55)) drop-shadow(0 10px 26px rgba(255,46,136,.35)); }
+  #logo-sub { font-size: 30px; font-weight: 800; letter-spacing: 14px; color: #00e5ff; text-shadow: 0 0 16px rgba(0,229,255,.75); margin-top: 2px; }
+  #tagline { margin-top: 14px; font-size: 17px; opacity: .95; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #controls { margin-top: 20px; font-size: 14.5px; line-height: 1.75; background: rgba(10,6,24,.55); padding: 10px 26px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); }
+  #controls b { color: #ffd23e; }
+  #start-prompt { margin-top: 24px; font-size: 21px; font-weight: 800; letter-spacing: 1px; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  #end { background: rgba(12,4,20,.66); }
+  #end-title { font-size: 88px; font-weight: 900; letter-spacing: 6px; color: #e5484d; text-shadow: 0 0 34px rgba(229,72,77,.55), 0 4px 0 rgba(0,0,0,.5); }
+  #end-title.wasted { color: #ff8c1a; text-shadow: 0 0 34px rgba(255,140,26,.5), 0 4px 0 rgba(0,0,0,.5); }
+  #end-stats { margin-top: 10px; font-size: 19px; line-height: 1.8; background: rgba(10,6,24,.6); padding: 12px 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2); }
+  #end-stats b { color: #39d353; }
+  #end-prompt { margin-top: 20px; font-size: 18px; font-weight: 700; animation: pulse 1.4s ease-in-out infinite; }
+  #pause { background: rgba(12,4,20,.55); }
+  #pause h1 { font-size: 54px; letter-spacing: 8px; margin: 0; }
+  #pause p { font-size: 16px; opacity: .9; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="hud">
+  <div id="top-left">
+    <div id="money">$0</div>
+    <div id="health-wrap"><div id="health-fill"></div></div>
+    <div id="health-label">HEALTH</div>
+  </div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="mission" style="display:none">
+    <div id="mission-title">MISSION</div>
+    <div id="mission-sub"></div>
+    <div id="mission-time">0:00</div>
+  </div>
+  <div id="bust"><div id="bust-label">THE COPS ARE ON YOU</div><div id="bust-wrap"><div id="bust-fill"></div></div></div>
+  <div id="prompt"></div>
+  <div id="toast"></div>
+  <div id="speed"></div>
+  <canvas id="minimap" width="190" height="190"></canvas>
+</div>
+
+<div id="title" class="overlay">
+  <div id="logo">VICE HARBOR</div>
+  <div id="logo-sub">NEON TIDE</div>
+  <div id="tagline">Steal cars. Run missions. Outrun the law under a neon sky.</div>
+  <div id="controls">
+    <b>W A S D</b> drive / walk &nbsp;·&nbsp; <b>E</b> steal / exit car &nbsp;·&nbsp; <b>SPACE</b> handbrake<br>
+    <b>SHIFT</b> sprint on foot &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; follow the <b>gold pillars</b> to get paid
+  </div>
+  <div id="start-prompt">CLICK OR PRESS ENTER TO PLAY</div>
+</div>
+
+<div id="end" class="overlay hidden">
+  <div id="end-title">BUSTED</div>
+  <div id="end-stats"></div>
+  <div id="end-prompt">PRESS R OR CLICK TO RUN IT AGAIN</div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h1>PAUSED</h1>
+  <p>The tide waits for no one. Press P to keep rolling.</p>
+</div>
+
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
