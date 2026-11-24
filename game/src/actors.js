@@ -241,6 +241,33 @@ export function updatePed(dt, ped) {
   ped.mesh.userData.armR.rotation.x = swing * 0.7;
 }
 
+/**
+ * Scatter pedestrians away from a point: when SKYHAWK-1's searchlight sweeps a block,
+ * the crowd breaks and runs from the light pool instead of strolling through it.
+ * Returns how many pedestrians turned to flee.
+ */
+export function scatterPeds(peds, x, z, radius) {
+  let fled = 0;
+  for (const ped of peds) {
+    if (ped.down > 0) continue;
+    const pos = ped.mesh.position;
+    const dx = pos.x - x;
+    const dz = pos.z - z;
+    if (Math.hypot(dx, dz) > radius) continue;
+    // Re-aim the stroll: pick the sidewalk corner farthest from the light.
+    let best = ped.wp;
+    let bestD = -1;
+    ped.corners.forEach((corner, idx) => {
+      const d = Math.hypot(corner.x - x, corner.z - z);
+      if (d > bestD) { bestD = d; best = idx; }
+    });
+    ped.wp = (best + ped.corners.length - 1) % ped.corners.length;
+    ped.speed = Math.min(3.4, ped.speed + 0.9);
+    fled += 1;
+  }
+  return fled;
+}
+
 /** Knock a pedestrian flat for a few seconds (they get up again; this is a cartoon). */
 export function knockPed(ped) {
   if (ped.down > 0) return false;

@@ -27,6 +27,9 @@ Then open the printed URL. Any static file server pointed at `game/` works too.
 | Shift | Sprint on foot |
 | Space | Handbrake |
 | E | Steal / enter a car · exit your car |
+| F | Fire the pistol (on foot, finite ammo — the garage sells more) |
+| Q | Next radio station |
+| G | Open / close the Neon Tide Garage (buy cars, fit upgrades, call a car out) |
 | P or Esc | Pause |
 | R | Restart after BUSTED / WASTED (or click) |
 | Enter / click | Start from the title screen |
@@ -48,10 +51,18 @@ Then open the printed URL. Any static file server pointed at `game/` works too.
   light bars after you; they ram, box you in, and fill your BUST meter when
   they pin you. Break line of sight and stay clean to cool the heat down.
   Health drains in crashes and on foot — hit zero and you are WASTED.
-- **Three rotating jobs**, marked by light pillars and a minimap target, each
-  with a countdown and a cash payout that scales with the heat:
-  *Checkpoint Run* (reach the marker), *Cash Grab* (collect five briefcases),
-  and *Hot Delivery* (pick up a package, then beat the clock to the drop-off).
+- **A ten-mission story graph** (v2), marked by light pillars and a minimap target:
+  six chapters on a spine — *First Fare*, *Paper Tide*, *Hot Sauce Run*, *Silent Dock*,
+  *Neon Debt*, *The Tide Turns* — plus four branch jobs (*Cab Confessional*,
+  *Rooftop Relay*, *Ambulance Drift*, *Harbor Lights*). Each chapter carries a line of
+  story, staged objectives and a reward the save ledger pays exactly once, however
+  often you replay it.
+- **SKYHAWK-1 air support** (v2): at four stars the Harbor PD dispatcher scrambles a
+  helicopter that shadows you with a sweeping searchlight. While its light holds you
+  the heat cannot cool — break the light for a few seconds and it peels off.
+- **Radio, garage, saves and a pistol** (v2): three synthesized radio stations on Q,
+  a garage on G where cash buys four cars and engine/armour upgrades, localStorage
+  saves of cash, chapters, cars and ammo, and a holdout pistol on F with finite rounds.
 - **Full HUD**: cash, health bar, wanted stars, live mission banner with
   timer, context prompts, toasts, a BUST meter, speedometer, and a real-time
   canvas minimap with traffic, police, pedestrians and your objective.
@@ -65,9 +76,11 @@ Then open the printed URL. Any static file server pointed at `game/` works too.
 
 - `game/index.html` — page, HUD and overlays
 - `game/src/` — `main.js` (game loop, physics, police, camera), `city.js`
-  (procedural city), `actors.js` (cars, police, pedestrians), `missions.js`
-  (the three jobs), `hud.js` (HUD + minimap), `audio.js` (WebAudio SFX),
-  `rng.js` (seeded randomness)
+  (procedural city + the PD helipad), `actors.js` (cars, police, pedestrians),
+  `missions.js` (the ten-chapter mission graph), `hud.js` (HUD + minimap),
+  `audio.js` (WebAudio SFX), `rng.js` (seeded randomness), and the v2 systems:
+  `airSupport.js` (SKYHAWK-1), `radio.js` (synth stations), `save.js`
+  (localStorage ledger), `garage.js` (cars + upgrades), `weapons.js` (the pistol)
 - `game/vendor/three.min.js` — three.js r160, vendored so the game is offline
 - `main.ts` — builds the submission dossier into `$MAKEFUN_OUTPUT_DIR`
 - `screenshots/` — the four dossier screenshots, captured from the real game

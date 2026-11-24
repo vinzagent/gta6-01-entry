@@ -337,6 +337,44 @@ export function buildCity(scene, rng) {
   scene.add(trunks);
   scene.add(crowns);
 
+  // The Harbor PD helipad: a painted pad on the marina-side parking block, home base
+  // for the SKYHAWK-1 air unit. A dark disc, a bright ring and a fat H, flat on the lot.
+  const padBlock = blockKinds.findIndex((k) => k === 'parking');
+  if (padBlock >= 0) {
+    const px = blockCenter(padBlock % GRID);
+    const pz = blockCenter(Math.floor(padBlock / GRID));
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(9, 28),
+      new THREE.MeshBasicMaterial({ color: 0x1c1c26 }),
+    );
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(px, 0.06, pz);
+    scene.add(pad);
+    const padRing = new THREE.Mesh(
+      new THREE.RingGeometry(8.2, 9, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffd23e, side: THREE.DoubleSide }),
+    );
+    padRing.rotation.x = -Math.PI / 2;
+    padRing.position.set(px, 0.07, pz);
+    scene.add(padRing);
+    const hCanvas = document.createElement('canvas');
+    hCanvas.width = 128;
+    hCanvas.height = 128;
+    const hc = hCanvas.getContext('2d');
+    hc.font = 'bold 96px system-ui, sans-serif';
+    hc.textAlign = 'center';
+    hc.textBaseline = 'middle';
+    hc.fillStyle = '#ffd23e';
+    hc.fillText('H', 64, 68);
+    const hMark = new THREE.Mesh(
+      new THREE.PlaneGeometry(7, 7),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hCanvas), transparent: true }),
+    );
+    hMark.rotation.x = -Math.PI / 2;
+    hMark.position.set(px, 0.08, pz);
+    scene.add(hMark);
+  }
+
   return { colliders, blockKinds };
 }
 

@@ -18,6 +18,16 @@
   #health-label { font-size: 10px; letter-spacing: 2px; opacity: .8; margin-top: 2px; }
   #stars { position: absolute; top: 12px; right: 20px; font-size: 30px; color: #ffd23e; text-shadow: 0 0 9px rgba(255,180,0,.8), 0 2px 4px rgba(0,0,0,.6); letter-spacing: 3px; }
   #speed { position: absolute; right: 22px; bottom: 18px; font-size: 24px; font-weight: 700; text-shadow: 0 2px 5px rgba(0,0,0,.8); }
+  #radio { position: absolute; right: 22px; bottom: 56px; font-size: 14px; font-weight: 700; color: #00e5ff; text-shadow: 0 2px 5px rgba(0,0,0,.8); letter-spacing: .5px; }
+  #weapon { position: absolute; right: 22px; bottom: 84px; font-size: 14px; font-weight: 700; color: #ffe9a0; text-shadow: 0 2px 5px rgba(0,0,0,.8); }
+  #airwarn { position: absolute; left: 50%; top: 122px; transform: translateX(-50%); font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #fff2b0; text-shadow: 0 0 12px rgba(255,220,90,.9), 0 2px 4px rgba(0,0,0,.7); display: none; }
+  #garage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; background: rgba(10,6,24,.72); }
+  #garage-panel { background: rgba(16,10,34,.95); border: 1px solid #00e5ff; border-radius: 12px; padding: 22px 30px; color: #fff; width: min(620px, 92vw); max-height: 84vh; overflow-y: auto; text-align: left; }
+  #garage-panel h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: 2px; color: #ffd23e; }
+  #garage-panel p { margin: 0 0 12px; opacity: .9; font-size: 14px; }
+  .shop-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.14); font-size: 14px; }
+  .shop-row button { background: #39d353; border: 0; color: #06130a; font-weight: 800; padding: 6px 14px; border-radius: 16px; cursor: pointer; white-space: nowrap; }
+  .shop-row .owned { color: #39d353; font-weight: 800; }
   #minimap { position: absolute; left: 18px; bottom: 18px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.4); border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
   #mission { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(10,6,24,.62); padding: 8px 22px 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,.22); min-width: 320px; }
   #mission-title { font-size: 19px; font-weight: 800; letter-spacing: 1.5px; }
@@ -66,8 +76,11 @@
     <div id="mission-time">0:00</div>
   </div>
   <div id="bust"><div id="bust-label">THE COPS ARE ON YOU</div><div id="bust-wrap"><div id="bust-fill"></div></div></div>
+  <div id="airwarn">SKYHAWK-1 AIRBORNE — BREAK THE SEARCHLIGHT</div>
   <div id="prompt"></div>
   <div id="toast"></div>
+  <div id="radio"></div>
+  <div id="weapon"></div>
   <div id="speed"></div>
   <canvas id="minimap" width="190" height="190"></canvas>
 </div>
@@ -78,7 +91,8 @@
   <div id="tagline">Steal cars. Run missions. Outrun the law under a neon sky.</div>
   <div id="controls">
     <b>W A S D</b> drive / walk &nbsp;·&nbsp; <b>E</b> steal / exit car &nbsp;·&nbsp; <b>SPACE</b> handbrake<br>
-    <b>SHIFT</b> sprint on foot &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; follow the <b>gold pillars</b> to get paid
+    <b>SHIFT</b> sprint &nbsp;·&nbsp; <b>F</b> fire pistol (on foot) &nbsp;·&nbsp; <b>Q</b> radio station &nbsp;·&nbsp; <b>G</b> garage<br>
+    <b>P</b> pause &nbsp;·&nbsp; follow the <b>mission pillars</b> — cash, cars and progress all save
   </div>
   <div id="start-prompt">CLICK OR PRESS ENTER TO PLAY</div>
 </div>
@@ -88,6 +102,8 @@
   <div id="end-stats"></div>
   <div id="end-prompt">PRESS R OR CLICK TO RUN IT AGAIN</div>
 </div>
+
+<div id="garage" class="hidden"><div id="garage-panel"></div></div>
 
 <div id="pause" class="overlay hidden">
   <h1>PAUSED</h1>

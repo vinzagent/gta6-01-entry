@@ -14,6 +14,12 @@ import {
 import { Missions } from './missions.js';
 import { Hud } from './hud.js';
 import { Sfx } from './audio.js';
+import { loadSave, storeSave, claimReward } from './save.js';
+import { Radio } from './radio.js';
+import { AirSupport } from './airSupport.js';
+import { CAR_CATALOG, catalogCar, buyCar, buyUpgrade, garageHtml, engineFactor, armorFactor } from './garage.js';
+import { Weapons } from './weapons.js';
+import { scatterPeds } from './actors.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.get('shot');
@@ -34,10 +40,24 @@ const { colliders, blockKinds } = buildCity(scene, new Rng(4242));
 const hud = new Hud();
 const sfx = new Sfx();
 
+// v2 persistent layer: the save is loaded once at boot and mirrored back on every
+// change, so cash, story progress, the garage and ammo survive reloads and busts.
+const save = loadSave();
+const radio = new Radio(sfx);
+radio.setStation(save.station || 0);
+const air = new AirSupport(scene);
+const weapons = new Weapons(scene, save);
+
 const game = {
   state: 'title',
   time: 0,
-  cash: 100,
+  cash: save.cash,
+  save,
+  radio,
+  air,
+  weapons,
+  garageOpen: false,
+  calledCar: null,
   health: 100,
   wanted: 0,
   lastSeen: -99,
@@ -60,6 +80,22 @@ const game = {
   addCash(n) {
     this.cash += n;
     if (n > 0) this.stats.earned += n;
+    this.save.cash = this.cash;
+    storeSave(this.save);
+  },
+  /**
+   * Settle a finished mission against the save ledger: the reward for a mission id is
+   * paid exactly once (claimReward), the chapter is marked complete, and everything
+   * is persisted before the toast shows. Returns the amount actually paid.
+   */
+  completeMission(def, amount) {
+    const paid = claimReward(this.save, def.id, amount);
+    if (!this.save.completed.includes(def.id)) this.save.completed.push(def.id);
+    this.save.missionsDone = this.save.completed.length;
+    this.cash = this.save.cash;
+    if (paid > 0) this.stats.earned += paid;
+    storeSave(this.save);
+    return paid;
   },
   toast(text) {
     if (!this.silent) hud.toast(text);
@@ -123,7 +159,7 @@ function spawnWorld() {
   starter.rotation.y = Math.PI / 2;
   scene.add(starter);
   game.parked.push({ kind: 'parked', mesh: starter, heading: Math.PI / 2, speed: 0, radius: 2.3, health: 100, stolen: false });
-  game.missions = new Missions(scene, rng);
+  game.missions = new Missions(scene, rng, save);
 }
 
 function despawnWorld() {
@@ -137,7 +173,8 @@ function despawnWorld() {
 function resetRun() {
   despawnWorld();
   rng = new Rng(SEED * 1000 + 17 + Math.floor(game.stats.time) + 1);
-  game.cash = 100;
+  game.cash = save.cash; // a bust costs the run, never the bank: the save endures
+  if (air.active) air.recall(game);
   game.health = 100;
   game.wanted = 0;
   game.bustMeter = 0;
@@ -159,7 +196,7 @@ function addCrime(amount) {
 
 function damage(amount) {
   if (game.state !== 'play') return;
-  game.health -= amount;
+  game.health -= amount * armorFactor(save); // garage armour plating soaks its share
   if (game.health <= 0) {
     game.health = 0;
     endRun('wasted');
@@ -175,6 +212,9 @@ window.addEventListener('keydown', (e) => {
   sfx.unlock();
   if (e.code === 'Enter' && game.state === 'title') startGame();
   if (e.code === 'KeyE' && game.state === 'play') toggleCar();
+  if (e.code === 'KeyQ' && game.state === 'play') cycleRadio();
+  if (e.code === 'KeyG' && (game.state === 'play' || game.garageOpen)) toggleGarage();
+  if (e.code === 'KeyF' && game.state === 'play' && !game.inCar) firePistol();
   if ((e.code === 'KeyP' || e.code === 'Escape') && (game.state === 'play' || game.state === 'pause')) togglePause();
   if (e.code === 'KeyR' && (game.state === 'busted' || game.state === 'wasted')) restart();
 });
@@ -188,6 +228,74 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ---------------- v2 systems: radio, garage, pistol ---------------- */
+
+function cycleRadio() {
+  const st = radio.next();
+  save.station = radio.index;
+  storeSave(save);
+  radio.start();
+  game.toast(`♪ ${st.name} — ${st.genre}`);
+}
+
+function firePistol() {
+  const before = save.ammo;
+  const hit = weapons.fire(game, player.mesh.position, player.heading);
+  if (save.ammo < before) {
+    addCrime(hit && hit.kind === 'police' ? 1.6 : 0.9); // shots fired are never free
+    storeSave(save);
+  }
+}
+
+const garageEl = document.getElementById('garage');
+const garagePanel = document.getElementById('garage-panel');
+
+function renderGarage() {
+  garagePanel.innerHTML = garageHtml(save) +
+    `<div class="shop-row"><span><b>Ammo Box</b> — 12 pistol rounds for the pouch</span><button data-buy-ammo="1">BUY $60</button></div>` +
+    CAR_CATALOG.filter((c) => save.ownedCars.includes(c.id)).map((c) =>
+      `<div class="shop-row"><span><b>${c.name}</b> — parked in your garage</span><button data-call-car="${c.id}">CALL IT OUT</button></div>`).join('');
+}
+
+function toggleGarage() {
+  game.garageOpen = !game.garageOpen;
+  garageEl.classList.toggle('hidden', !game.garageOpen);
+  if (game.garageOpen) renderGarage();
+}
+
+function callOutCar(carId) {
+  const spec = catalogCar(carId);
+  if (game.calledCar) {
+    scene.remove(game.calledCar.mesh);
+    game.parked = game.parked.filter((c) => c !== game.calledCar);
+  }
+  const mesh = makeCarMesh(spec.color);
+  const p = game.playerPos();
+  mesh.position.set(p.x + 4.5, 0, p.z + 2);
+  mesh.rotation.y = Math.PI / 2;
+  scene.add(mesh);
+  const car = { kind: 'parked', mesh, heading: Math.PI / 2, speed: 0, radius: 2.3, health: 100, stolen: true, topSpeed: spec.topSpeed };
+  game.parked.push(car);
+  game.calledCar = car;
+  game.toast(`${spec.name} rolled out beside you — E to drive`);
+}
+
+garagePanel.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  let result = null;
+  if (btn.dataset.buyCar) result = buyCar(save, btn.dataset.buyCar);
+  else if (btn.dataset.buyUpgrade) result = buyUpgrade(save, btn.dataset.buyUpgrade);
+  else if (btn.dataset.buyAmmo) result = weapons.buyAmmo(save);
+  else if (btn.dataset.callCar) { callOutCar(btn.dataset.callCar); toggleGarage(); return; }
+  if (result) {
+    game.cash = save.cash;
+    storeSave(save);
+    game.toast(result.line);
+    renderGarage();
+  }
 });
 
 function nearestCar(maxDist) {
@@ -266,7 +374,9 @@ function updatePlayerCar(dt) {
   else car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), 4.5 * dt);
   car.speed -= car.speed * 0.32 * dt;
   if (brake) car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), 30 * dt);
-  car.speed = Math.max(-10, Math.min(31, car.speed));
+  // Each car's own ceiling, raised fleet-wide by the garage engine tune.
+  const ceiling = (car.topSpeed || 31) * engineFactor(save);
+  car.speed = Math.max(-10, Math.min(ceiling, car.speed));
   const grip = Math.min(1, Math.abs(car.speed) / 7);
   car.heading += steerIn * (brake ? 2.4 : 1.75) * grip * Math.sign(car.speed || 1) * dt;
   pos.x += Math.sin(car.heading) * car.speed * dt;
@@ -417,6 +527,8 @@ const pauseEl = document.getElementById('pause');
 function startGame() {
   titleEl.classList.add('hidden');
   game.state = 'play';
+  radio.start(); // the context was unlocked by the same gesture that started the game
+  if (save.completed.length > 0) game.toast(`Welcome back — ${save.completed.length} chapters done, garage saved`);
 }
 
 function togglePause() {
@@ -437,6 +549,8 @@ function fmtTime(s) {
 
 function endRun(kind) {
   game.state = kind;
+  save.cash = game.cash;
+  storeSave(save); // busted or wasted, the story and the garage carry over
   sfx.sting();
   sfx.setEngine(0, 0);
   sfx.setSiren(0);
@@ -493,6 +607,12 @@ function step(dt, auto = false) {
     carCarCollisions();
     pedHits();
     managePolice(dt);
+    air.update(dt, game);
+    weapons.update(dt);
+    if (air.active && air.lightsPlayer(game)) {
+      const pool = air.mesh.userData.pool.position;
+      scatterPeds(game.peds, pool.x, pool.z, 11); // the crowd breaks from the light
+    }
     game.missions.update(dt, game, game.time);
     // Context prompt + audio state.
     if (!game.inCar) {
@@ -565,8 +685,8 @@ function setupShot(name) {
     game.cash = chaseScene ? 1120 : 640;
     game.health = chaseScene ? 64 : 88;
     if (chaseScene) {
-      game.wanted = 3.4;
-      game.stats.maxWanted = 4;
+      game.wanted = 4.3; // four-plus stars: SKYHAWK-1 dispatches during the stepped scene
+      game.stats.maxWanted = 5;
       for (const [px, pz] of [[8, -118], [-16, -104], [2, -88]]) {
         const cop = makePoliceCar(scene, px, pz);
         cop.flash = game.police.length * 0.6;

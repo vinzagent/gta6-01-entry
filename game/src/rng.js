@@ -32,4 +32,24 @@ export class Rng {
   chance(p) {
     return this.next() < p;
   }
+  /** A shuffled copy of `list` (Fisher–Yates on this stream); the input is untouched. */
+  shuffle(list) {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(this.next() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+  /** Weighted pick: entries are [value, weight] pairs; heavier entries win more often. */
+  weighted(pairs) {
+    let total = 0;
+    for (const [, w] of pairs) total += w;
+    let roll = this.next() * total;
+    for (const [value, w] of pairs) {
+      roll -= w;
+      if (roll <= 0) return value;
+    }
+    return pairs[pairs.length - 1][0];
+  }
 }

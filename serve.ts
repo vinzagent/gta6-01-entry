@@ -65,6 +65,9 @@ createServer((request, response) => {
     'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': size,
     'cache-control': 'no-store',
+    // The game is played from this server during development; keep browsers from
+    // sniffing a module script into something else.
+    'x-content-type-options': 'nosniff',
   });
   createReadStream(file).pipe(response);
 }).listen(port, '127.0.0.1', () => {

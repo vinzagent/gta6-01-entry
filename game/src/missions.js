@@ -1,8 +1,11 @@
-// The work that pays: a rotating set of street missions. A CHECKPOINT RUN sends you to a
-// pillar of light against the clock, CASH GRAB scatters five glowing briefcases over the
-// map, and HOT DELIVERY makes you pick up a package and drop it across town. Each mission
-// drives a HUD banner, a minimap marker and a cash payout, and the next one is offered a
-// few seconds after the last ends, pass or fail.
+// The Neon Tide story: ten named missions in a graph, not a rotation. Six chapters form
+// the spine — Mara Venn, a fixer with a debt to the tide, walks you from a first errand
+// to the night the harbor itself is on the line — and four side jobs branch off the
+// spine once their chapter is done. Every mission has a name, a line of story, staged
+// objectives and a cash reward. Rewards are idempotent: the game's ledger pays each
+// mission id exactly once, so replaying, retrying or reloading a save can never pay a
+// chapter twice. Finished chapters stay finished in the save; when the graph is done
+// the streets offer endless replays of any chapter for a small, non-story fee.
 
 import { ROAD_LINES } from './city.js';
 
@@ -58,16 +61,63 @@ function makeCrate(color, label) {
   return group;
 }
 
-const TYPES = ['checkpoint', 'cashgrab', 'delivery'];
+/**
+ * The mission graph. `requires` lists chapter ids that must be complete first; the
+ * validator below proves every requirement exists and the graph has no dead branch.
+ * kind reuses the three proven objective shapes: checkpoint, cashgrab, delivery.
+ */
+export const MISSION_GRAPH = [
+  { id: 'first-fare', title: 'FIRST FARE', kind: 'checkpoint', reward: 300, color: '#ffd23e', requires: [], story: 'Mara Venn needs a driver who asks nothing. Reach her lookout and the harbor opens up.' },
+  { id: 'paper-tide', title: 'PAPER TIDE', kind: 'cashgrab', reward: 420, color: '#39d353', requires: ['first-fare'], story: 'A tide of marked bills spilled across the east blocks. Gather five cases before the PD does.' },
+  { id: 'hot-sauce', title: 'HOT SAUCE RUN', kind: 'delivery', reward: 520, color: '#ff8c1a', requires: ['paper-tide'], story: 'Chef Lio\'s "special sauce" cannot sit in a hot car. Pick it up, drop it fast, ask nothing.' },
+  { id: 'silent-dock', title: 'SILENT DOCK', kind: 'checkpoint', reward: 560, color: '#00e5ff', requires: ['hot-sauce'], story: 'A boat leaves the silent dock at dusk. Be the shadow standing on the pier when it does.' },
+  { id: 'neon-debt', title: 'NEON DEBT', kind: 'cashgrab', reward: 700, color: '#ff2e88', requires: ['silent-dock'], story: 'The Neon Parlor owes Mara five drops. Collect every one and the debt — and her leash — is gone.' },
+  { id: 'tide-turns', title: 'THE TIDE TURNS', kind: 'delivery', reward: 950, color: '#d500f9', requires: ['neon-debt'], story: 'The last package: Mara\'s way out of Vice Harbor. Deliver it and the tide turns for good.' },
+  { id: 'cab-confessional', title: 'CAB CONFESSIONAL', kind: 'checkpoint', reward: 380, color: '#ffe14d', requires: ['first-fare'], branch: true, story: 'An old cabbie hears everything. Race his route and he will tell you where the money sleeps.' },
+  { id: 'rooftop-relay', title: 'ROOFTOP RELAY', kind: 'cashgrab', reward: 480, color: '#76ff03', requires: ['paper-tide'], branch: true, story: 'Couriers stash relay pouches on the low roofs\' shadows. Five pouches, one skyline.' },
+  { id: 'ambulance-drift', title: 'AMBULANCE DRIFT', kind: 'delivery', reward: 640, color: '#ff7043', requires: ['hot-sauce'], branch: true, story: 'A private clinic needs donor ice, no sirens, no questions. Drive like a heartbeat.' },
+  { id: 'harbor-lights', title: 'HARBOR LIGHTS', kind: 'checkpoint', reward: 800, color: '#a8d8ff', requires: ['neon-debt'], branch: true, story: 'Signal the fleet from the harbor lights: three seconds in the beam and the night is yours.' },
+];
+
+/** Prove the graph is sound: unique ids, known requirements, no unreachable chapter. */
+export function validateMissionGraph(graph = MISSION_GRAPH) {
+  const ids = new Set(graph.map((m) => m.id));
+  if (ids.size !== graph.length) return 'duplicate mission id';
+  for (const m of graph) {
+    for (const req of m.requires) if (!ids.has(req)) return `${m.id} requires missing ${req}`;
+  }
+  const done = new Set();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const m of graph) {
+      if (!done.has(m.id) && m.requires.every((r) => done.has(r))) { done.add(m.id); grew = true; }
+    }
+  }
+  return done.size === graph.length ? null : 'mission graph has an unreachable branch';
+}
 
 export class Missions {
-  constructor(scene, rng) {
+  constructor(scene, rng, save = null) {
     this.scene = scene;
     this.rng = rng;
-    this.cycle = rng.int(0, 2);
+    this.save = save; // shared save record: completed chapters persist across runs
     this.current = null;
+    this.def = null;
     this.cooldown = 2.5;
     this.markers = [];
+    const flaw = validateMissionGraph();
+    if (flaw) throw new Error(`mission graph broken: ${flaw}`);
+  }
+
+  completedIds() {
+    return new Set(this.save ? this.save.completed : []);
+  }
+
+  /** Chapters whose requirements are met and which are not yet complete. */
+  available() {
+    const done = this.completedIds();
+    return MISSION_GRAPH.filter((m) => !done.has(m.id) && m.requires.every((r) => done.has(r)));
   }
 
   clearMarkers() {
@@ -85,26 +135,28 @@ export class Missions {
     return spots;
   }
 
-  /** Offer the next mission in the rotation. `game` supplies playerPos/addCash/toast/sfx. */
+  /** Offer the next chapter: first available in graph order, else a replayable encore. */
   beginNext(game) {
     this.clearMarkers();
-    const type = TYPES[this.cycle % TYPES.length];
-    this.cycle += 1;
+    const next = this.available()[0];
+    const def = next || this.rng.pick(MISSION_GRAPH);
+    this.def = def;
     const pos = game.playerPos();
-    if (type === 'checkpoint') {
+    const encore = !next;
+    const tail = encore ? ' (encore — streets fee only)' : '';
+    if (def.kind === 'checkpoint') {
       const spot = this.rng.pick(this.spotsFarFrom(pos, 110));
       const dist = Math.hypot(spot.x - pos.x, spot.z - pos.z);
-      const marker = makePillar(0xffd23e);
+      const marker = makePillar(def.color === '#ffd23e' ? 0xffd23e : new THREE.Color(def.color).getHex());
       marker.position.set(spot.x, 0, spot.z);
-      const tag = makeLabel('GO!', '#ffd23e');
+      const tag = makeLabel('GO!', def.color);
       tag.position.y = 12;
       marker.add(tag);
       this.scene.add(marker);
       this.markers.push(marker);
-      this.current = { type, title: 'CHECKPOINT RUN', sub: 'Reach the gold pillar before time runs out', x: spot.x, z: spot.z, timeLeft: dist / 13 + 16, reward: 300, color: '#ffd23e' };
-      game.toast('New mission: CHECKPOINT RUN');
-    } else if (type === 'cashgrab') {
-      const spots = this.spotsFarFrom(pos, 45);
+      this.current = { type: 'checkpoint', title: def.title, sub: def.story, x: spot.x, z: spot.z, timeLeft: dist / 13 + 18, reward: def.reward, color: def.color };
+    } else if (def.kind === 'cashgrab') {
+      const spots = this.rng.shuffle(this.spotsFarFrom(pos, 45));
       const cases = [];
       for (let i = 0; i < 5; i += 1) {
         const spot = this.rng.pick(spots);
@@ -114,17 +166,16 @@ export class Missions {
         this.markers.push(crate);
         cases.push({ x: crate.position.x, z: crate.position.z, mesh: crate, taken: false });
       }
-      this.current = { type, title: 'CASH GRAB', sub: 'Collect all 5 briefcases', cases, got: 0, timeLeft: 150, reward: 200, color: '#39d353' };
-      game.toast('New mission: CASH GRAB');
+      this.current = { type: 'cashgrab', title: def.title, sub: `${def.story} (0/5)`, cases, got: 0, timeLeft: 160, reward: def.reward, color: def.color };
     } else {
       const from = this.rng.pick(this.spotsFarFrom(pos, 80));
       const pickup = makeCrate(0xff8c1a, 'PKG');
       pickup.position.set(from.x, 0, from.z);
       this.scene.add(pickup);
       this.markers.push(pickup);
-      this.current = { type, title: 'HOT DELIVERY', sub: 'Pick up the package', stage: 'pickup', x: from.x, z: from.z, timeLeft: 60, reward: 450, color: '#ff8c1a' };
-      game.toast('New mission: HOT DELIVERY');
+      this.current = { type: 'delivery', title: def.title, sub: `${def.story} First: pick up the package.`, stage: 'pickup', x: from.x, z: from.z, timeLeft: 70, reward: def.reward, color: def.color };
     }
+    game.toast(`Mission: ${def.title}${tail}`);
   }
 
   /** The spot the minimap should highlight right now, or null between missions. */
@@ -168,9 +219,9 @@ export class Missions {
           this.scene.remove(c.mesh);
           this.markers = this.markers.filter((mk) => mk !== c.mesh);
           m.got += 1;
-          game.addCash(120, 'briefcase');
+          m.sub = `${this.def.story} (${m.got}/5)`;
           game.sfx.blip(760);
-          game.toast(`Briefcase ${m.got} of 5 — $${120}`);
+          game.toast(`Case ${m.got} of 5 secured`);
           if (m.got >= 5) this.complete(game, m, m.reward);
         }
       }
@@ -186,8 +237,8 @@ export class Missions {
           m.x = dest.x;
           m.z = dest.z;
           m.stage = 'dropoff';
-          m.sub = 'Now drop it at the orange pillar — move!';
-          m.timeLeft = Math.hypot(dest.x - pos.x, dest.z - pos.z) / 13 + 14;
+          m.sub = 'Package on board — now drop it at the orange pillar, fast!';
+          m.timeLeft = Math.hypot(dest.x - pos.x, dest.z - pos.z) / 13 + 16;
           game.toast('Package on board — deliver it!');
           game.sfx.blip(620);
         } else {
@@ -198,9 +249,11 @@ export class Missions {
   }
 
   complete(game, m, amount) {
-    game.addCash(amount, 'mission');
+    // The game owns the ledger: it pays this mission id once, marks the chapter
+    // complete in the save and reports what was actually paid (0 on an encore).
+    const paid = game.completeMission ? game.completeMission(this.def, amount) : (game.addCash(amount), amount);
     game.stats.missions += 1;
-    game.toast(`${m.title} COMPLETE — +$${amount}`);
+    game.toast(paid > 0 ? `${m.title} COMPLETE — +$${paid}` : `${m.title} COMPLETE — encore, ledger already paid`);
     game.sfx.cash();
     this.current = null;
     this.cooldown = 3.5;
@@ -211,7 +264,6 @@ export class Missions {
   describe() {
     const m = this.current;
     if (!m) return null;
-    const sub = m.type === 'cashgrab' ? `${m.sub} (${m.got}/5)` : m.sub;
-    return { title: m.title, sub, timeLeft: Math.max(0, m.timeLeft), color: m.color };
+    return { title: m.title, sub: m.sub, timeLeft: Math.max(0, m.timeLeft), color: m.color };
   }
 }

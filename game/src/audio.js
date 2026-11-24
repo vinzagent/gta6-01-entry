@@ -146,6 +146,34 @@ export class Sfx {
     src.start(t);
   }
 
+  /** A pistol crack: a square blip pitched down hard over a breath of filtered noise. */
+  shot() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.09);
+    gain.gain.setValueAtTime(0.16, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    osc.connect(gain);
+    gain.connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.12);
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.08), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.2;
+    src.connect(noiseGain);
+    noiseGain.connect(this.master);
+    src.start(t);
+  }
+
   /** A low two-tone sting when a run ends, busted or wasted. */
   sting() {
     if (!this.ctx) return;

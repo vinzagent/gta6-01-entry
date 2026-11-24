@@ -46,7 +46,25 @@ for (const name of shotNames) {
     throw new Error(`hand-in refused: screenshot ${name} is ${bytes} bytes, over the 256 KiB cap`);
   }
 }
-console.log(`Vice Harbor hand-in: game/index.html plus ${shotNames.length} screenshots (${shotNames.join(', ')})`);
+// Vice Harbor v2 package check: the six v2 systems live in their own modules under
+// game/src/ (missions graph, air support, radio, save, garage, weapons). Refuse to hand
+// in a package where one of them went missing — a thin dossier would read as the old
+// game to the judge, and v1's 984.522 is the bar this build has to clear.
+const v2Modules = ['missions.js', 'airSupport.js', 'radio.js', 'save.js', 'garage.js', 'weapons.js'];
+for (const name of v2Modules) {
+  const modulePath = join(out, 'game', 'src', name);
+  if (!existsSync(modulePath)) {
+    throw new Error(`hand-in refused: v2 module game/src/${name} is missing from the package`);
+  }
+  // An empty or stub module would pass a presence check while shipping nothing, so
+  // hold each system to a real minimum size as well (the smallest genuine one, the
+  // save ledger, is well over a kilobyte of code).
+  const moduleBytes = statSync(modulePath).size;
+  if (moduleBytes < 1000) {
+    throw new Error(`hand-in refused: v2 module game/src/${name} is only ${moduleBytes} bytes, a stub is not a system`);
+  }
+}
+console.log(`Vice Harbor hand-in: game/index.html plus ${shotNames.length} screenshots (${shotNames.join(', ')}) and ${v2Modules.length} v2 system modules`);
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
 // scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game

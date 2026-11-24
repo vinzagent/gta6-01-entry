@@ -18,6 +18,9 @@ export class Hud {
     this.bustBox = document.getElementById('bust');
     this.bustFill = document.getElementById('bust-fill');
     this.speed = document.getElementById('speed');
+    this.radio = document.getElementById('radio');
+    this.weapon = document.getElementById('weapon');
+    this.airwarn = document.getElementById('airwarn');
     this.map = document.getElementById('minimap');
     this.mapCtx = this.map.getContext('2d');
     this.toastTimer = 0;
@@ -59,6 +62,11 @@ export class Hud {
       this.bustBox.style.display = 'none';
     }
     this.speed.textContent = game.inCar ? `${Math.round(Math.abs(game.playerCar.speed) * 2.4)} MPH` : '';
+    // v2 systems on the HUD: the radio station now playing, pistol rounds on foot,
+    // and the SKYHAWK-1 warning while air support is dispatched.
+    if (this.radio) this.radio.textContent = game.radio ? `♪ ${game.radio.station().name}` : '';
+    if (this.weapon) this.weapon.textContent = !game.inCar && game.weapons ? `PISTOL · ${game.weapons.ammo()} RDS` : '';
+    if (this.airwarn) this.airwarn.style.display = game.air && game.air.active ? 'block' : 'none';
     this.drawMap(game);
   }
 
@@ -105,6 +113,16 @@ export class Hud {
     for (const car of game.traffic) dot(car.mesh.position.x, car.mesh.position.z, '#c9ccd6', 2.4);
     const flash = Math.floor(game.time * 4) % 2 === 0;
     for (const cop of game.police) dot(cop.mesh.position.x, cop.mesh.position.z, flash ? '#ff4040' : '#4070ff', 3);
+    if (game.air && game.air.active) {
+      // SKYHAWK-1 on the map: a pale gold blip with its searchlight pool ring.
+      const hp = game.air.mesh.position;
+      dot(hp.x, hp.z, '#fff2b0', 3.4);
+      ctx.strokeStyle = 'rgba(255,242,176,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc((hp.x - pos.x) * scale, (hp.z - pos.z) * scale, 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     const target = game.missions.target();
     if (target) {
       const tx = (target.x - pos.x) * scale;
