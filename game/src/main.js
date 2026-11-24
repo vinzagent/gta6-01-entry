@@ -19,6 +19,7 @@ import { Radio } from './radio.js';
 import { AirSupport } from './airSupport.js';
 import { CAR_CATALOG, catalogCar, buyCar, buyUpgrade, garageHtml, engineFactor, armorFactor } from './garage.js';
 import { Weapons } from './weapons.js';
+import { Collectibles } from './collectibles.js';
 import { scatterPeds } from './actors.js';
 
 const params = new URLSearchParams(location.search);
@@ -47,6 +48,7 @@ const radio = new Radio(sfx);
 radio.setStation(save.station || 0);
 const air = new AirSupport(scene);
 const weapons = new Weapons(scene, save);
+const packages = new Collectibles(scene, save, sfx, hud);
 
 const game = {
   state: 'title',
@@ -609,6 +611,7 @@ function step(dt, auto = false) {
     managePolice(dt);
     air.update(dt, game);
     weapons.update(dt);
+    packages.update(dt, game);
     if (air.active && air.lightsPlayer(game)) {
       const pool = air.mesh.userData.pool.position;
       scatterPeds(game.peds, pool.x, pool.z, 11); // the crowd breaks from the light

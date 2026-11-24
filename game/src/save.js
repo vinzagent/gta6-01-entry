@@ -14,6 +14,8 @@ export const DEFAULT_SAVE = {
   ammo: 24,
   station: 0,
   missionsDone: 0,
+  packages: [],
+  packagesBonus: false,
 };
 
 /** Read the saved record, tolerating a missing or damaged one by starting fresh. */

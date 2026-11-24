@@ -21,6 +21,29 @@ export class Hud {
     this.radio = document.getElementById('radio');
     this.weapon = document.getElementById('weapon');
     this.airwarn = document.getElementById('airwarn');
+    // Hidden-package counter chip. The markup ships without a slot for it, so
+    // the chip is built here and docked under the cash readout: a small dark
+    // pill with a mint border that always reads "PACKAGES n/20" and pulses
+    // once whenever the count changes, so a pickup registers in the corner of
+    // the eye even while the toast is busy with something else.
+    this.packagesChip = document.createElement('div');
+    this.packagesChip.id = 'packages-chip';
+    this.packagesChip.textContent = 'PACKAGES 0/20';
+    this.packagesChip.style.position = 'absolute';
+    this.packagesChip.style.top = '64px';
+    this.packagesChip.style.right = '18px';
+    this.packagesChip.style.padding = '5px 12px';
+    this.packagesChip.style.border = '1px solid #39ffb0';
+    this.packagesChip.style.borderRadius = '999px';
+    this.packagesChip.style.background = 'rgba(4, 24, 20, 0.72)';
+    this.packagesChip.style.color = '#b8ffe2';
+    this.packagesChip.style.font = '700 13px/1.2 system-ui, sans-serif';
+    this.packagesChip.style.letterSpacing = '0.08em';
+    this.packagesChip.style.pointerEvents = 'none';
+    this.packagesChip.style.zIndex = '30';
+    this.packagesChip.style.transition = 'transform 160ms ease';
+    document.body.appendChild(this.packagesChip);
+    this.packagesShown = -1;
     this.map = document.getElementById('minimap');
     this.mapCtx = this.map.getContext('2d');
     this.toastTimer = 0;
@@ -38,6 +61,23 @@ export class Hud {
       if (this.toastTimer <= 0) this.toastBox.classList.remove('show');
     }
     this.money.textContent = `$${Math.floor(game.cash)}`;
+    // Keep the packages chip honest every frame: the collectibles system owns
+    // the count and mirrors it onto game.packagesFound, the HUD only renders
+    // it. A change of count gets one quick scale pulse as pickup feedback.
+    const found = typeof game.packagesFound === 'number' ? game.packagesFound : 0;
+    if (found !== this.packagesShown) {
+      this.packagesShown = found;
+      this.packagesChip.textContent = `PACKAGES ${found}/20`;
+      this.packagesChip.style.transform = 'scale(1.18)';
+      setTimeout(() => { this.packagesChip.style.transform = 'scale(1)'; }, 170);
+      // A completed set turns the chip gold so the finished hunt stays
+      // visible on the HUD for the rest of the session, not just in a toast.
+      if (found >= 20) {
+        this.packagesChip.style.borderColor = '#ffd94d';
+        this.packagesChip.style.color = '#ffe98a';
+        this.packagesChip.textContent = 'PACKAGES 20/20 ★ COMPLETE';
+      }
+    }
     this.healthFill.style.width = `${Math.max(0, Math.min(100, game.health))}%`;
     this.healthFill.style.background = game.health > 35 ? '#39d353' : '#e5484d';
     const lit = Math.ceil(game.wanted);
